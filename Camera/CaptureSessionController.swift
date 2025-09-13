@@ -246,27 +246,6 @@ final class CaptureSessionController: NSObject {
         return value
     }
 
-    func rampZoom(to factor: CGFloat, duration: TimeInterval = 0.25) {
-        sessionQueue.async {
-            guard let device = self.videoDevice else { return }
-            let minZoom = device.minAvailableVideoZoomFactor
-            let maxZoom = min(device.maxAvailableVideoZoomFactor, 6.0)
-            let clamped = max(minZoom, min(factor, maxZoom))
-            do {
-                try device.lockForConfiguration()
-                let current = device.videoZoomFactor
-                let delta = abs(clamped - current)
-                let rate = Float(max(0.5, min(64.0, delta / max(0.01, duration))))
-                if device.isRampingVideoZoom {
-                    device.cancelVideoZoomRamp()
-                }
-                device.ramp(toVideoZoomFactor: clamped, withRate: rate)
-                device.unlockForConfiguration()
-            } catch {
-                print("Zoom ramp error: \(error)")
-            }
-        }
-    }
 
     func cancelZoomRamp() {
         sessionQueue.async {
@@ -281,17 +260,6 @@ final class CaptureSessionController: NSObject {
         }
     }
 
-    func minMaxZoomFactors() -> (min: CGFloat, max: CGFloat) {
-        var result: (min: CGFloat, max: CGFloat) = (1.0, 6.0)
-        sessionQueue.sync {
-            if let device = self.videoDeviceInput?.device ?? self.videoDevice {
-                let minZoom = device.minAvailableVideoZoomFactor
-                let maxZoom = min(device.maxAvailableVideoZoomFactor, 6.0)
-                result = (minZoom, maxZoom)
-            }
-        }
-        return result
-    }
 
     // MARK: - Quick Jumps (0.5x / 1x / 2x)
     func jumpToHalfX() {

@@ -35,15 +35,6 @@ final class CameraViewModel: NSObject, ObservableObject {
     private var orientationObserver: Any?
     private var savedScreenBrightness: CGFloat?
 
-#if canImport(SCSDKCameraKit)
-    // Optional Snap Camera Kit integration
-    private var snapAR: SnapARCamera?
-    @Published var useSnapAR: Bool = false // Preview switches to Snap when true
-    // Configure these with your credentials (see README for setup)
-    var snapApiToken: String = "eyJhbGciOiJIUzI1NiIsImtpZCI6IkNhbnZhc1MyU0hNQUNQcm9kIiwidHlwIjoiSldUIn0.eyJhdWQiOiJjYW52YXMtY2FudmFzYXBpIiwiaXNzIjoiY2FudmFzLXMyc3Rva2VuIiwibmJmIjoxNzU3Nzc0MzM2LCJzdWIiOiI5MTllMjQ3NC0xNDNmLTRkOWMtYmIyMi0yYjE2NTQyZWJjZmZ-UFJPRFVDVElPTn41N2MxMGZlZi1iM2QxLTQ3YWItODYyZi05NDU0MmRkYTg2ZjUifQ.TN_Ivk8UGbCW1hpxeDswuWm-mxOI7vKs_cNOgLlka0U" // e.g., "<YOUR_CAMERA_KIT_API_TOKEN>"
-    var snapLensID: String = ""   // e.g., "<BEAUTY_LENS_ID>"
-    var snapLensGroupID: String? = nil // e.g., "<GROUP_ID>" or nil
-#endif
 
     override init() {
         super.init()
@@ -71,10 +62,6 @@ final class CameraViewModel: NSObject, ObservableObject {
                 self.setupOrientationMonitoring()
                 self.start()
 
-#if canImport(SCSDKCameraKit)
-                // Attempt to start Snap only if credentials are set
-                self.tryStartSnapIfConfigured()
-#endif
             }
         }
     }
@@ -483,51 +470,6 @@ extension CameraViewModel {
         }
     }
 
-    // Legacy single-file filter kept for reference; currently unused
-    private func applyFilter(_ filterType: VideoFilter, to inputURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
-        let asset = AVAsset(url: inputURL)
-        let composition = AVVideoComposition(asset: asset) { request in
-            let src = request.sourceImage.clampedToExtent()
-            let output: CIImage?
-            switch filterType {
-            case .none:
-                output = src
-            case .mono:
-                let f = CIFilter.photoEffectMono()
-                f.inputImage = src
-                output = f.outputImage
-            }
-            if let img = output?.cropped(to: request.sourceImage.extent) {
-                request.finish(with: img, context: nil)
-            } else {
-                request.finish(with: NSError(domain: "Filter", code: -1, userInfo: [NSLocalizedDescriptionKey: "Filter failed"]))
-            }
-        }
-
-        guard let exporter = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else {
-            completion(.failure(NSError(domain: "Filter", code: -2, userInfo: [NSLocalizedDescriptionKey: "Cannot create exporter"])));
-            return
-        }
-        exporter.videoComposition = composition
-        exporter.outputFileType = .mov
-        let outURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("filtered_\(UUID().uuidString).mov")
-        exporter.outputURL = outURL
-        exporter.exportAsynchronously {
-            print("Filter export status: \(exporter.status.rawValue)")
-            switch exporter.status {
-            case .completed:
-                print("Filter export completed successfully")
-                completion(.success(outURL))
-            case .failed, .cancelled:
-                let error = exporter.error ?? NSError(domain: "Filter", code: -3, userInfo: [NSLocalizedDescriptionKey: "Export failed"])
-                print("Filter export failed: \(error)")
-                completion(.failure(error))
-            default:
-                print("Filter export in progress")
-                break
-            }
-        }
-    }
 
     private func saveVideoToPhotos(_ fileURL: URL) {
         // Check if file exists before attempting to save
@@ -590,26 +532,3 @@ extension CameraViewModel {
     }
 }
 
-#if canImport(SCSDKCameraKit)
-// MARK: - Snap Camera Kit (optional)
-extension CameraViewModel {
-    func tryStartSnapIfConfigured(useAR: Bool = true) {
-        guard !snapApiToken.isEmpty, !snapLensID.isEmpty else { return }
-        if snapAR == nil { snapAR = SnapARCamera() }
-        snapAR?.onLensReady = { [weak self] ok in
-            guard let self else { return }
-            self.useSnapAR = ok
-            // Disable our Core Image filter when Snap AR is active
-            if ok { self.selectedFilter = .none }
-        }
-        snapAR?.start(with: controller.session, apiToken: snapApiToken, useAR: useAR)
-        snapAR?.applyLens(id: snapLensID, groupId: snapLensGroupID)
-    }
-
-    // Returns a Camera Kit PreviewView when Snap AR is active
-    func snapPreviewIfActive() -> PreviewView? {
-        guard useSnapAR else { return nil }
-        return snapAR?.previewView()
-    }
-}
-#endif

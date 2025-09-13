@@ -45,3 +45,25 @@ Package.resolved
 *.tmp
 *.temp
 *.log
+
+# Security & Privacy
+*.p8
+*.mobileprovision
+*.certSigningRequest
+*.p12
+*.cer
+*.key
+*.pem
+
+# API Keys & Secrets
+.env
+.env.local
+.env.production
+secrets.plist
+config.plist
+APIKeys.plist
+
+# User-specific Xcode settings
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
