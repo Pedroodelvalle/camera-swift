@@ -8,13 +8,13 @@ A camera app that doesn't suck. Built with SwiftUI and AVFoundation featuring te
 
 ## Preview
 
-<img src="foto-camera-com-teleprompter.jpeg" width="200" alt="Camera com Teleprompter"> &nbsp;&nbsp;&nbsp;&nbsp; <img src="foto-camera-sem-teleprompter.jpeg" width="200" alt="Camera sem Teleprompter">
+<img src="images/foto-camera-com-teleprompter.jpeg" width="200" alt="Camera com Teleprompter"> &nbsp;&nbsp;&nbsp;&nbsp; <img src="images/foto-camera-sem-teleprompter.jpeg" width="200" alt="Camera sem Teleprompter">
 
 *Com Teleprompter | Sem Teleprompter*
 
 &nbsp;
 
-<img src="camera-filter.PNG" width="200" alt="Camera Filters"> &nbsp;&nbsp;&nbsp;&nbsp; <img src="camera-takes.jpeg" width="200" alt="Camera Takes">
+<img src="images/camera-filter.PNG" width="200" alt="Camera Filters"> &nbsp;&nbsp;&nbsp;&nbsp; <img src="images/camera-takes.jpeg" width="200" alt="Camera Takes">
 
 *Live Filters | Segmented Takes*
 
