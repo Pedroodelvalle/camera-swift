@@ -20,7 +20,7 @@ final class CameraViewModel: NSObject, ObservableObject {
     @Published var frameRateLabel: String = "60 fps"
     @Published var quickZoomIndex: Int = 1 // 0 -> 0.5x, 1 -> 1x, 2 -> 2x
     @Published var isTorchOn: Bool = false
-    @Published var isFilterOn: Bool = false
+    @Published var selectedFilter: VideoFilter = .none
     @Published var showGrid: Bool = false
     @Published var segments: [RecordedSegment] = []
     // Teleprompter
@@ -85,7 +85,22 @@ final class CameraViewModel: NSObject, ObservableObject {
     }
 
     // MARK: - Filter
-    func toggleFilter() { isFilterOn.toggle() }
+    enum VideoFilter: String, CaseIterable, Identifiable {
+        case none
+        case mono
+
+        var id: String { rawValue }
+        var displayName: String {
+            switch self {
+            case .none:   return "Nenhum"
+            case .mono:   return "Suavizar"
+            }
+        }
+    }
+
+    func setFilter(_ filter: VideoFilter) {
+        selectedFilter = filter
+    }
     
     // MARK: - Teleprompter
     func toggleTeleprompter() { isTeleprompterOn.toggle() }
@@ -352,30 +367,8 @@ extension CameraViewModel {
         exporter.outputURL = outputURL
         exporter.outputFileType = .mov
 
-        // Apply filter if enabled
-        if isFilterOn {
-            print("Applying filter to concatenated video")
-            applyRoseFilter(to: composition) { result in
-                switch result {
-                case .success(let filteredURL):
-                    print("Filter applied successfully, saving filtered video")
-                    self.saveVideoToPhotos(filteredURL)
-                    // Clean up temp files after a delay
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                        try? FileManager.default.removeItem(at: filteredURL)
-                        try? FileManager.default.removeItem(at: outputURL)
-                    }
-                case .failure(let error):
-                    print("Filter application failed: \(error)")
-                    print("Saving unfiltered video instead")
-                    self.saveVideoToPhotos(outputURL)
-                    // Clean up temp file after a delay
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                        try? FileManager.default.removeItem(at: outputURL)
-                    }
-                }
-            }
-        } else {
+        // Apply filter if selected, otherwise export raw
+        if selectedFilter == .none {
             exporter.exportAsynchronously { [weak self] in
                 guard let self = self else { return }
 
@@ -399,6 +392,28 @@ extension CameraViewModel {
                     break
                 }
             }
+        } else {
+            print("Applying filter (\(selectedFilter.displayName)) to concatenated video")
+            applyFilter(selectedFilter, to: composition) { result in
+                switch result {
+                case .success(let filteredURL):
+                    print("Filter applied successfully, saving filtered video")
+                    self.saveVideoToPhotos(filteredURL)
+                    // Clean up temp files after a delay
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        try? FileManager.default.removeItem(at: filteredURL)
+                        try? FileManager.default.removeItem(at: outputURL)
+                    }
+                case .failure(let error):
+                    print("Filter application failed: \(error)")
+                    print("Saving unfiltered video instead")
+                    self.saveVideoToPhotos(outputURL)
+                    // Clean up temp file after a delay
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        try? FileManager.default.removeItem(at: outputURL)
+                    }
+                }
+            }
         }
 
         // Clean up individual segment files
@@ -412,27 +427,33 @@ extension CameraViewModel {
         }
     }
 
-    private func applyRoseFilter(to composition: AVMutableComposition, completion: @escaping (Result<URL, Error>) -> Void) {
+    private func applyFilter(_ filterType: VideoFilter, to composition: AVMutableComposition, completion: @escaping (Result<URL, Error>) -> Void) {
         let asset = composition
-        let compositionWithFilter = AVVideoComposition(asset: asset) { request in
-            let sourceImage = request.sourceImage.clampedToExtent()
-            // Rose tint using CIColorMonochrome with pink hue
-            let filter = CIFilter.colorMonochrome()
-            filter.inputImage = sourceImage
-            filter.intensity = 0.6
-            filter.color = CIColor(red: 1.0, green: 0.6, blue: 0.75)
-            if let output = filter.outputImage?.cropped(to: request.sourceImage.extent) {
-                request.finish(with: output, context: nil)
+        let videoComposition = AVVideoComposition(asset: asset) { request in
+            let src = request.sourceImage.clampedToExtent()
+            let output: CIImage?
+
+            switch filterType {
+            case .none:
+                output = src
+            case .mono:
+                let f = CIFilter.photoEffectMono()
+                f.inputImage = src
+                output = f.outputImage
+            }
+
+            if let img = output?.cropped(to: request.sourceImage.extent) {
+                request.finish(with: img, context: nil)
             } else {
                 request.finish(with: NSError(domain: "Filter", code: -1, userInfo: [NSLocalizedDescriptionKey: "Filter failed"]))
             }
         }
 
         guard let exporter = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else {
-            completion(.failure(NSError(domain: "Filter", code: -2, userInfo: [NSLocalizedDescriptionKey: "Cannot create exporter"])))
+            completion(.failure(NSError(domain: "Filter", code: -2, userInfo: [NSLocalizedDescriptionKey: "Cannot create exporter"])));
             return
         }
-        exporter.videoComposition = compositionWithFilter
+        exporter.videoComposition = videoComposition
         exporter.outputFileType = .mov
         let outURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("filtered_final_\(UUID().uuidString).mov")
         exporter.outputURL = outURL
@@ -462,17 +483,22 @@ extension CameraViewModel {
         }
     }
 
-    private func applyRoseFilter(to inputURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
+    // Legacy single-file filter kept for reference; currently unused
+    private func applyFilter(_ filterType: VideoFilter, to inputURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
         let asset = AVAsset(url: inputURL)
         let composition = AVVideoComposition(asset: asset) { request in
-            let sourceImage = request.sourceImage.clampedToExtent()
-            // Rose tint using CIColorMonochrome with pink hue
-            let filter = CIFilter.colorMonochrome()
-            filter.inputImage = sourceImage
-            filter.intensity = 0.6
-            filter.color = CIColor(red: 1.0, green: 0.6, blue: 0.75)
-            if let output = filter.outputImage?.cropped(to: request.sourceImage.extent) {
-                request.finish(with: output, context: nil)
+            let src = request.sourceImage.clampedToExtent()
+            let output: CIImage?
+            switch filterType {
+            case .none:
+                output = src
+            case .mono:
+                let f = CIFilter.photoEffectMono()
+                f.inputImage = src
+                output = f.outputImage
+            }
+            if let img = output?.cropped(to: request.sourceImage.extent) {
+                request.finish(with: img, context: nil)
             } else {
                 request.finish(with: NSError(domain: "Filter", code: -1, userInfo: [NSLocalizedDescriptionKey: "Filter failed"]))
             }
@@ -574,7 +600,7 @@ extension CameraViewModel {
             guard let self else { return }
             self.useSnapAR = ok
             // Disable our Core Image filter when Snap AR is active
-            if ok { self.isFilterOn = false }
+            if ok { self.selectedFilter = .none }
         }
         snapAR?.start(with: controller.session, apiToken: snapApiToken, useAR: useAR)
         snapAR?.applyLens(id: snapLensID, groupId: snapLensGroupID)

@@ -7,7 +7,7 @@ App de câmera em SwiftUI com:
 - Flash/torch (traseira) e “screen torch” na frontal
 - Teleprompter flutuante com edição, play/pause, velocidade e tamanho da fonte ajustáveis, arrastar/redimensionar
 - Exportação em HEVC (quando disponível), estabilização cinematográfica e orientação preservada
-- Filtro rosado opcional no export (pré-visualização com leve overlay quando ativado)
+- Filtros opcionais no export (Rose, Mono, Noir, Chrome) com pré-visualização indicativa (overlay leve)
 
 ## Requisitos
 - Xcode 16.4+
@@ -39,14 +39,16 @@ As gravações são salvas usando autorização “add-only” quando disponíve
 - Inferior (centro):
   - Seletores de zoom rápido: 0.5x / 1x / 2x
   - Botão de gravar: inicia/para a gravação segmentada (com timer no topo durante a gravação)
+- Inferior (esquerda):
+  - Botão de Filtros abre um seletor compacto (Nenhum, Rose, Mono, Noir, Chrome)
 - Inferior (direita):
   - Alternar câmera (frontal/traseira)
   - Botão “Avançar” aparece quando há segmentos (concatena e salva)
 
-## Filtro (preview + export)
-- Preview: overlay de tom rosado leve quando o filtro está ativo
-- Export: pós-processamento com Core Image (CIColorMonochrome em tom rosado) via AVVideoComposition; resultado salvo na Fototeca
-Nota: o projeto mantém o filtro como opcional (desativado por padrão).
+## Filtros (preview + export)
+- Preview: overlay leve para indicar o filtro escolhido (efeito ilustrativo)
+- Export: pós-processamento com Core Image via AVVideoComposition (Mono/Noir/Chrome e Rose com CIColorMonochrome); resultado salvo na Fototeca
+Nota: os filtros são opcionais (Nenhum por padrão). O preview não processa os frames ao vivo; o efeito final é aplicado no export.
 
 ## Teleprompter
 - Ativação: botão no topo abre o overlay flutuante
@@ -87,4 +89,3 @@ Um `.gitignore` padrão para Xcode/Swift foi adicionado. Para remover arquivos j
 git rm -r --cached .DS_Store
 git commit -m "remove DS_Store"
 ```
-

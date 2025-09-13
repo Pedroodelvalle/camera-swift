@@ -15,6 +15,7 @@ struct ContentView: View {
     @State private var countdownTimer: Timer?
     @State private var showDeleteConfirm: Bool = false
     @State private var segmentToDelete: CameraViewModel.RecordedSegment? = nil
+    @State private var showFilterPicker: Bool = false
 
     var body: some View {
         ZStack {
@@ -40,9 +41,9 @@ struct ContentView: View {
                                 .allowsHitTesting(false)
                         }
 
-                        // Rose tint overlay for preview when filter is on
-                        if model.isFilterOn {
-                            Color(red: 1.0, green: 0.6, blue: 0.75)
+                        // Lightweight overlay hint to approximate selected filter visually
+                        if let overlay = previewOverlayColor(for: model.selectedFilter) {
+                            overlay
                                 .opacity(0.12)
                                 .allowsHitTesting(false)
                         }
@@ -247,6 +248,44 @@ struct ContentView: View {
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
+            // Tap outside to dismiss the filter menu
+            if showFilterPicker {
+                Color.black.opacity(0.001)
+                    .ignoresSafeArea()
+                    .onTapGesture { withAnimation(.easeOut(duration: 0.2)) { showFilterPicker = false } }
+            }
+
+            // Bottom-left: Filter button + vertical menu opening upward
+            VStack {
+                Spacer()
+                HStack(alignment: .bottom, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if showFilterPicker {
+                            FilterMenu(selected: model.selectedFilter) { chosen in
+                                model.setFilter(chosen)
+                                withAnimation(.easeOut(duration: 0.2)) { showFilterPicker = false }
+                            }
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.98, anchor: .bottomLeading)),
+                                removal: .move(edge: .bottom).combined(with: .opacity)
+                            ))
+                        }
+
+                        Button(action: { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showFilterPicker.toggle() } }) {
+                            Image(systemName: model.selectedFilter == .none ? "wand.and.stars" : "wand.and.stars.inverse")
+                                .font(.system(size: 24, weight: .regular))
+                                .foregroundColor(.white)
+                                .padding(15)
+                        }
+                        .buttonStyle(GlassCircleButtonStyle())
+                        .accessibilityLabel("Escolher filtro")
+                    }
+                    Spacer()
+                }
+                .padding(.leading, 30)
+                .padding(.bottom, 95)
+            }
+
             // Bottom-right buttons: camera toggle remains in original spot
             VStack {
                 Spacer()
@@ -288,12 +327,15 @@ struct ContentView: View {
         .onAppear { model.requestPermissionsAndConfigure() }
         .onChange(of: model.isRecording) { newValue in
             if newValue {
+                withAnimation(.easeOut(duration: 0.2)) { showFilterPicker = false }
                 startCountdown()
             } else {
                 stopCountdown()
             }
         }
-        .onChange(of: model.isTeleprompterOn) { _ in }
+        .onChange(of: model.isTeleprompterOn) { _ in
+            withAnimation(.easeOut(duration: 0.2)) { showFilterPicker = false }
+        }
         .alert("Deseja apagar esse take?", isPresented: $showDeleteConfirm) {
             Button("Apagar", role: .destructive) {
                 if let seg = segmentToDelete {
@@ -366,6 +408,100 @@ struct GridOverlay: View {
                 p.addLine(to: CGPoint(x: 2 * hStep, y: h))
             }
             .stroke(Color.white.opacity(0.4), lineWidth: 1)
+        }
+    }
+}
+
+// MARK: - Filter helpers
+extension ContentView {
+    func previewOverlayColor(for filter: CameraViewModel.VideoFilter) -> Color? {
+        switch filter {
+        case .none: return nil
+        case .mono: return Color.black
+        }
+    }
+}
+
+struct FilterMenu: View {
+    let selected: CameraViewModel.VideoFilter
+    let onSelect: (CameraViewModel.VideoFilter) -> Void
+
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            LazyVStack(alignment: .leading, spacing: 6) {
+                ForEach(CameraViewModel.VideoFilter.allCases, id: \.id) { f in
+                    FilterRow(filter: f, selected: f == selected) { onSelect(f) }
+                }
+            }
+            .padding(10)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.08))
+        )
+        .background(
+            .ultraThinMaterial,
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.14), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.35), radius: 18, x: 0, y: 12)
+        .frame(maxWidth: 180)
+        .frame(maxHeight: 120)
+        .clipped()
+    }
+}
+
+struct FilterRow: View {
+    let filter: CameraViewModel.VideoFilter
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                FilterSwatch(filter: filter)
+                    .frame(width: 22, height: 22)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.white.opacity(0.35), lineWidth: selected ? 1.2 : 0.8))
+
+                Text(filter.displayName)
+                    .font(.system(size: 13, weight: selected ? .semibold : .regular))
+                    .foregroundColor(.white)
+
+                Spacer()
+
+                if selected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.white)
+                        .transition(.opacity)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.white.opacity(selected ? 0.18 : 0.10))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct FilterSwatch: View {
+    let filter: CameraViewModel.VideoFilter
+    var body: some View {
+        switch filter {
+        case .none:
+            LinearGradient(
+                colors: [Color.gray.opacity(0.6), Color.gray.opacity(0.3)],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
+        case .mono:
+            LinearGradient(colors: [.white, .black], startPoint: .topLeading, endPoint: .bottomTrailing)
         }
     }
 }
