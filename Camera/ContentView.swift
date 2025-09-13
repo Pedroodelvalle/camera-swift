@@ -70,30 +70,30 @@ struct ContentView: View {
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundColor(.white)
                                 .padding(14)
-                                .background(.ultraThinMaterial, in: Circle())
                         }
+                        .buttonStyle(GlassCircleButtonStyle())
                         .accessibilityLabel("Fechar câmera")
 
                         Spacer()
 
                         // Frame rate button
                         Button(action: { model.toggleFrameRate() }) {
-                            Image(systemName: "speedometer")
+                            Text(model.frameRateLabel.contains("60") ? "4K" : "HD")
                                 .font(.system(size: 18, weight: .semibold))
                                 .foregroundColor(.white)
                                 .padding(10)
-                                .background(.ultraThinMaterial, in: Circle())
                         }
-                        .accessibilityLabel("Alternar taxa de quadros")
+                        .buttonStyle(GlassCircleButtonStyle())
+                        .accessibilityLabel("Alternar entre HD e 4K")
 
                         // Grid toggle
                         Button(action: { model.toggleGrid() }) {
-                            Image(systemName: model.showGrid ? "rectangle.split.3x3" : "rectangle.grid.1x2")
+                            Image(systemName: model.showGrid ? "rectangle.split.3x3" : "rectangle.grid.2x2")
                                 .font(.system(size: 18, weight: .semibold))
                                 .foregroundColor(.white)
                                 .padding(10)
-                                .background(.ultraThinMaterial, in: Circle())
                         }
+                        .buttonStyle(GlassCircleButtonStyle())
                         .accessibilityLabel("Alternar grade")
 
                         // Torch toggle
@@ -102,9 +102,19 @@ struct ContentView: View {
                                 .font(.system(size: 18, weight: .semibold))
                                 .foregroundColor(model.isTorchOn ? .yellow : .white)
                                 .padding(10)
-                                .background(.ultraThinMaterial, in: Circle())
                         }
+                        .buttonStyle(GlassCircleButtonStyle())
                         .accessibilityLabel("Alternar flash")
+
+                        // Teleprompter toggle
+                        Button(action: { model.toggleTeleprompter() }) {
+                            Image(systemName: model.isTeleprompterOn ? "text.viewfinder" : "text.bubble")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(10)
+                        }
+                        .buttonStyle(GlassCircleButtonStyle())
+                        .accessibilityLabel("Alternar teleprompter")
                     }
                     .padding(.horizontal)
                     .padding(.top, 30)
@@ -128,33 +138,52 @@ struct ContentView: View {
                     .animation(.spring(response: 0.8, dampingFraction: 0.6, blendDuration: 0.4), value: model.isRecording)
                 }
 
+                // Teleprompter overlay - positioned below top controls
+                if model.isTeleprompterOn {
+                    TeleprompterOverlay(
+                        text: $model.teleprompterText,
+                        speed: $model.teleprompterSpeed,
+                        fontSize: $model.teleprompterFontSize,
+                        isRecording: $model.isRecording
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .allowsHitTesting(true)
+                }
+
                 Spacer()
 
                 // Botões de zoom acima do botão de gravar, ambos centralizados
                 VStack(spacing: 16) {
                     // Quick zoom selector - centralizado
                     HStack(spacing: 16) {
-                        ForEach(0..<3, id: \.self) { idx in
-                            let label: String = (idx == 0 ? "0.5" : (idx == 1 ? "1" : "2"))
-                            Text(label + "x")
-                                .font(.system(size: 14, weight: model.quickZoomIndex == idx ? .semibold : .medium))
-                                .foregroundStyle(model.quickZoomIndex == idx ? Color.yellow : Color.white.opacity(0.9))
-                                .frame(width: 44, height: 44)
-                                .background(
-                                    ZStack {
-                                        if model.quickZoomIndex == idx {
-                                            Circle()
-                                                .fill(Color.white.opacity(0.15))
-                                                .overlay(Circle().stroke(Color.yellow.opacity(0.5), lineWidth: 1))
-                                        } else {
-                                            Circle()
-                                                .fill(Color.white.opacity(0.08))
-                                        }
-                                    }
-                                )
-                                .onTapGesture { model.selectQuickZoom(index: idx) }
-                        }
+                        Spacer(minLength: 0)
                     }
+                    .overlay(
+                        HStack(spacing: 16) {
+                            ForEach(0..<3, id: \.self) { idx in
+                                let label: String = (idx == 0 ? "0.5" : (idx == 1 ? "1" : "2"))
+                                Text(label + "x")
+                                    .font(.system(size: 12, weight: model.quickZoomIndex == idx ? .semibold : .medium))
+                                    .foregroundStyle(model.quickZoomIndex == idx ? Color.yellow : Color.white.opacity(0.9))
+                                    .frame(width: 36, height: 36)
+                                    .background(
+                                        ZStack {
+                                            if model.quickZoomIndex == idx {
+                                                Circle()
+                                                    .fill(Color.white.opacity(0.15))
+                                                    .overlay(Circle().stroke(Color.yellow.opacity(0.5), lineWidth: 1))
+                                            } else {
+                                                Circle()
+                                                    .fill(Color.white.opacity(0.08))
+                                            }
+                                        }
+                                    )
+                                    .onTapGesture { model.selectQuickZoom(index: idx) }
+                            }
+                        }
+                        .offset(y: -30) // Move zoom buttons up
+                    )
 
                     // Botão de gravar - centralizado (sempre visível para parar/iniciar)
                     Button(action: { model.toggleRecording() }) {
@@ -163,11 +192,11 @@ struct ContentView: View {
                             Circle()
                                 .fill(Color.white.opacity(0.1)) // Fundo semi-transparente
                                 .frame(width: 80, height: 80)
-                                .overlay(Circle().stroke(Color.white, lineWidth: 4))
+                                .overlay(Circle().stroke(Color.white, lineWidth: 8))
 
                             // Círculo vermelho que diminui e fica mais quadrado arredondado quando grava
                             RoundedRectangle(cornerRadius: model.isRecording ? 12 : 38)
-                                .fill(Color.red)
+                                .fill(Color(red: 1.0, green: 94/255, blue: 87/255))
                                 .frame(width: model.isRecording ? 42 : 76, height: model.isRecording ? 42 : 76)
                                 .animation(.easeInOut(duration: 0.3), value: model.isRecording)
                         }
@@ -228,8 +257,8 @@ struct ContentView: View {
                             .font(.system(size: 24, weight: .regular))
                             .foregroundColor(.white)
                             .padding(15)
-                            .background(.ultraThinMaterial, in: Circle())
                     }
+                    .buttonStyle(GlassCircleButtonStyle())
                     .padding(.trailing, 30)
                     .padding(.bottom, 95)
                     .accessibilityLabel("Trocar câmera")
@@ -244,11 +273,11 @@ struct ContentView: View {
                         Spacer()
                         Button(action: { model.nextAction() }) {
                             Image(systemName: "arrow.right.circle.fill")
-                                .font(.system(size: 24, weight: .semibold))
+                                .font(.system(size: 26, weight: .semibold))
                                 .foregroundColor(.white)
-                                .padding(10)
-                                .background(Color(red: 0x29/255.0, green: 0x84/255.0, blue: 0xf6/255.0), in: Circle())
+                                .padding(11)
                         }
+                        .buttonStyle(GlassCircleButtonStyle(isProminent: true, accentColor: Color(red: 0x29/255.0, green: 0x84/255.0, blue: 0xf6/255.0)))
                         .padding(.trailing, 12)
                         .padding(.bottom, 10)
                         .accessibilityLabel("Avançar")
@@ -264,6 +293,7 @@ struct ContentView: View {
                 stopCountdown()
             }
         }
+        .onChange(of: model.isTeleprompterOn) { _ in }
         .alert("Deseja apagar esse take?", isPresented: $showDeleteConfirm) {
             Button("Apagar", role: .destructive) {
                 if let seg = segmentToDelete {

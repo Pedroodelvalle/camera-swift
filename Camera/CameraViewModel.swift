@@ -23,6 +23,11 @@ final class CameraViewModel: NSObject, ObservableObject {
     @Published var isFilterOn: Bool = false
     @Published var showGrid: Bool = false
     @Published var segments: [RecordedSegment] = []
+    // Teleprompter
+    @Published var isTeleprompterOn: Bool = false
+    @Published var teleprompterText: String = "Adicione seu roteiro aqui..."
+    @Published var teleprompterSpeed: Double = 16.0 // points per second (default slower)
+    @Published var teleprompterFontSize: CGFloat = 24.0 // default smaller
 
     let controller = CaptureSessionController()
     private var recorder: SegmentedRecorder?
@@ -81,6 +86,9 @@ final class CameraViewModel: NSObject, ObservableObject {
 
     // MARK: - Filter
     func toggleFilter() { isFilterOn.toggle() }
+    
+    // MARK: - Teleprompter
+    func toggleTeleprompter() { isTeleprompterOn.toggle() }
 
     func stop() {
         controller.stopSession()
