@@ -101,16 +101,10 @@ final class TeleprompterViewModel: ObservableObject {
         let signature = "\(text.hashValue)|\(fontSize)|\(Int(width))"
         guard signature != lastContentSignature else { return }
         
-        let oldHeight = cachedContentHeight
         cachedContentHeight = calculateContentHeight(text: text, fontSize: fontSize, width: width)
         lastContentSignature = signature
         
-        // Preserve relative offset to avoid visible flicker during resize/move
-        if oldHeight > 0, cachedContentHeight > 0 {
-            let ratio = contentOffset / max(1, max(0, oldHeight))
-            let maxNew = max(0, cachedContentHeight)
-            contentOffset = max(0, min(maxNew, ratio * maxNew))
-        }
+        // Keep current contentOffset unchanged here; proper clamping will occur separately
     }
 
     // Debounced update while interacting
@@ -192,15 +186,18 @@ final class TeleprompterViewModel: ObservableObject {
             .font: UIFont.systemFont(ofSize: fontSize, weight: .semibold),
             .paragraphStyle: paragraphStyle
         ]
+        let targetWidth = max(0, width - TeleprompterConfig.contentPadding)
         let boundingRect = (text as NSString).boundingRect(
-            with: CGSize(width: width - TeleprompterConfig.contentPadding, height: .greatestFiniteMagnitude),
+            with: CGSize(width: targetWidth, height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading],
             attributes: attributes,
             context: nil
         )
 
-        // Include internal vertical padding used in ScrollingTextView
-        return boundingRect.height + TeleprompterConfig.textVerticalPadding
+        let baseHeight = ceil(boundingRect.height)
+        // Include internal vertical padding used in ScrollingTextView (top/bottom 12 each)
+        // plus the extra top/bottom buffer (textVerticalPadding). Add small epsilon to avoid rounding issues.
+        return ceil(baseHeight + TeleprompterConfig.textVerticalPadding + 24 + 2)
     }
     
     // MARK: - Position Management
@@ -271,6 +268,15 @@ final class TeleprompterViewModel: ObservableObject {
         } else {
             stopScrolling(resetOffset: false)
         }
+    }
+    
+    func resetOffsetToTop() {
+        scrollTimer?.invalidate()
+        scrollTimer = nil
+        isPlaying = false
+        isManualScrolling = false
+        initialManualOffset = 0
+        contentOffset = 0
     }
     
     deinit {

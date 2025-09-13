@@ -22,12 +22,18 @@ struct TeleprompterOverlay: View {
                 .onAppear {
                     viewModel.initializeOverlay(parentSize: geometry.size)
                     viewModel.updateContentHeight(text: text, fontSize: fontSize, width: viewModel.overlaySize.width)
+                    if !isRecording && !viewModel.isPlaying && !viewModel.isManualScrolling {
+                        viewModel.contentOffset = 0
+                    }
                 }
                 .onChange(of: isRecording) { newValue in
                     let viewportHeight = max(viewModel.overlaySize.height - TeleprompterConfig.viewportPadding, 80)
                     viewModel.handleRecordingStateChange(isRecording: newValue, speed: speed, viewportHeight: viewportHeight)
                 }
                 .onChange(of: text) { _ in
+                    if !isRecording && !viewModel.isPlaying && !viewModel.isManualScrolling {
+                        viewModel.contentOffset = 0
+                    }
                     viewModel.scheduleContentHeightUpdate(text: text, fontSize: fontSize, width: viewModel.overlaySize.width)
                     let vp = max(viewModel.overlaySize.height - TeleprompterConfig.viewportPadding, 80)
                     viewModel.scheduleClampOffset(viewportHeight: vp)
@@ -149,7 +155,7 @@ struct TeleprompterOverlay: View {
         }
         .onChange(of: viewModel.isEditorPresented) { newValue in
             if !newValue {
-                viewModel.contentOffset = 0
+                viewModel.resetOffsetToTop()
             }
         }
     }
@@ -179,7 +185,7 @@ struct ScrollingTextView: View {
         ZStack(alignment: .topLeading) {
             VStack(alignment: .leading, spacing: 12) {
                 // Top buffer so the first line isn't clipped under the gradient when starting
-                Color.clear.frame(height: TeleprompterConfig.textVerticalPadding / 2)
+                Color.clear.frame(height: 0)
 
                 Text(text.isEmpty ? "" : text)
                     .font(.system(size: fontSize, weight: .semibold))
@@ -192,7 +198,7 @@ struct ScrollingTextView: View {
                     .padding(.vertical, 12)
 
                 // Bottom buffer to match height calculation and smooth wrap
-                Color.clear.frame(height: TeleprompterConfig.textVerticalPadding / 2)
+                Color.clear.frame(height: TeleprompterConfig.textVerticalPadding)
             }
             .offset(y: -offset)
         }
@@ -226,7 +232,7 @@ struct EditableTextPreview: View {
         ZStack(alignment: .topLeading) {
             VStack(alignment: .leading, spacing: 12) {
                 // Top buffer to match ScrollingTextView layout
-                Color.clear.frame(height: TeleprompterConfig.textVerticalPadding / 2)
+                Color.clear.frame(height: 0)
 
                 Text(text.isEmpty ? "Adicione seu roteiro aqui..." : text)
                     .font(.system(size: fontSize, weight: .semibold))
@@ -239,7 +245,7 @@ struct EditableTextPreview: View {
                     .padding(.vertical, 12)
 
                 // Bottom buffer to match ScrollingTextView layout
-                Color.clear.frame(height: TeleprompterConfig.textVerticalPadding / 2)
+                Color.clear.frame(height: TeleprompterConfig.textVerticalPadding)
             }
             .offset(y: -offset)
         }
