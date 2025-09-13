@@ -1,0 +1,55 @@
+# Dependabot configuration for Camera App
+# https://docs.github.com/en/code-security/dependabot
+
+version: 2
+updates:
+  # Swift Package Manager dependencies
+  - package-ecosystem: "swift"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Sao_Paulo"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "Pedroodelvalle"
+    assignees:
+      - "Pedroodelvalle"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  # GitHub Actions dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Sao_Paulo"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "Pedroodelvalle"
+    assignees:
+      - "Pedroodelvalle"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+
+  # CocoaPods dependencies (if used in future)
+  - package-ecosystem: "cocoapods"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Sao_Paulo"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "Pedroodelvalle"
+    assignees:
+      - "Pedroodelvalle"
+    commit-message:
+      prefix: "deps"
+      include: "scope"

@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  create-release:
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Extract Version
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      
+    - name: Build Release
+      run: |
+        xcodebuild -project Camera.xcodeproj \
+                   -scheme Camera \
+                   -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5' \
+                   -configuration Release \
+                   clean build
+                   
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Camera App ${{ steps.version.outputs.VERSION }}
+        body: |
+          ## 📱 Camera App ${{ steps.version.outputs.VERSION }}
+          
+          ### ✨ What's New
+          - Check the commit history for detailed changes
+          
+          ### 📋 Requirements
+          - iOS 18.5+
+          - Xcode 16.4+ for development
+          
+          ### 🚀 Installation
+          1. Clone the repository
+          2. Open `Camera.xcodeproj` in Xcode
+          3. Build and run on a physical device
+          
+          ### 🔧 Technical Details
+          - Built with SwiftUI and AVFoundation
+          - Professional camera controls and video recording
+          - Live teleprompter overlay
+          - Real-time video filters
+          
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.sha }}
+        draft: false
+        prerelease: false

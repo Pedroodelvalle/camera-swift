@@ -1,0 +1,30 @@
+# GitHub Topics Configuration
+# This file helps GitHub automatically suggest relevant topics for your repository
+# Topics improve discoverability in GitHub search
+
+topics:
+  - swift
+  - swiftui
+  - ios
+  - avfoundation
+  - camera
+  - video-recording
+  - teleprompter
+  - video-filters
+  - mobile-app
+  - mvvm
+  - combine
+  - core-image
+  - hevc
+  - video-processing
+  - content-creation
+  - mobile-filmmaking
+  - professional-camera
+  - segmented-recording
+  - real-time-filters
+  - floating-overlay
+  - glass-morphism
+  - modern-ui
+  - xcode
+  - ios-development
+  - video-production
