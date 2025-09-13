@@ -27,26 +27,47 @@ struct TeleprompterOverlay: View {
                     }
                 }
                 .onChange(of: isRecording) { newValue in
-                    let viewportHeight = max(viewModel.overlaySize.height - TeleprompterConfig.viewportPadding, 80)
+                    let vpPadding = newValue ? TeleprompterConfig.compactViewportPadding : TeleprompterConfig.viewportPadding
+                    let viewportHeight = max(viewModel.overlaySize.height - vpPadding, 80)
                     viewModel.handleRecordingStateChange(isRecording: newValue, speed: speed, viewportHeight: viewportHeight)
                 }
                 .onChange(of: text) { _ in
-                    if !isRecording && !viewModel.isPlaying && !viewModel.isManualScrolling {
-                        viewModel.contentOffset = 0
+                    if !isRecording && !viewModel.isPlaying {
+                        // Reset immediately for the preview and mark to persist after layout
+                        viewModel.resetOffsetToTop()
+                        viewModel.markResetAfterEditing()
                     }
                     viewModel.scheduleContentHeightUpdate(text: text, fontSize: fontSize, width: viewModel.overlaySize.width)
                     let vp = max(viewModel.overlaySize.height - TeleprompterConfig.viewportPadding, 80)
                     viewModel.scheduleClampOffset(viewportHeight: vp)
+                    viewModel.ensurePreviewAtTop(isRecording: isRecording)
+                    if !isRecording && !viewModel.isPlaying {
+                        viewModel.forcePreviewStartFromTop()
+                    }
                 }
                 .onChange(of: fontSize) { _ in
+                    if !isRecording && !viewModel.isPlaying {
+                        viewModel.resetOffsetToTop()
+                    }
                     viewModel.scheduleContentHeightUpdate(text: text, fontSize: fontSize, width: viewModel.overlaySize.width)
                     let vp = max(viewModel.overlaySize.height - TeleprompterConfig.viewportPadding, 80)
                     viewModel.scheduleClampOffset(viewportHeight: vp)
+                    // Reset to top when font size changes to prevent cutoff
+                    if !isRecording && !viewModel.isPlaying {
+                        viewModel.contentOffset = 0
+                        viewModel.markResetAfterEditing()
+                        viewModel.forcePreviewStartFromTop()
+                    }
                 }
                 .onChange(of: viewModel.overlaySize) { _ in
                     viewModel.scheduleContentHeightUpdate(text: text, fontSize: fontSize, width: viewModel.overlaySize.width)
                     let vp = max(viewModel.overlaySize.height - TeleprompterConfig.viewportPadding, 80)
                     viewModel.scheduleClampOffset(viewportHeight: vp)
+                    // Always keep preview starting at top when not playing/recording
+                    viewModel.ensurePreviewAtTop(isRecording: isRecording)
+                    if !isRecording && !viewModel.isPlaying {
+                        viewModel.forcePreviewStartFromTop()
+                    }
                 }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -60,42 +81,39 @@ struct TeleprompterOverlay: View {
         let viewportHeight = max(currentSize.height - paddingToUse, 80)
         
         VStack(alignment: .leading, spacing: 0) {
-            // Content viewport
+            // Content viewport (UITextView bridge for precise scrolling)
             ZStack {
-                if isRecording || viewModel.isPlaying {
-                    ScrollingTextView(
-                        text: text,
-                        fontSize: fontSize,
-                        offset: viewModel.contentOffset,
-                        height: viewportHeight,
-                        isInteracting: viewModel.isInteracting
-                    )
-                } else {
-                    EditableTextPreview(
-                        text: text,
-                        fontSize: fontSize,
-                        height: viewportHeight,
-                        onTap: { if !viewModel.isManualScrolling { viewModel.isEditorPresented = true } },
-                        isInteracting: viewModel.isInteracting,
-                        offset: viewModel.contentOffset
-                    )
-                }
+                TeleprompterTextView(
+                    text: text,
+                    fontSize: fontSize,
+                    contentOffset: .init(get: { viewModel.contentOffset }, set: { viewModel.contentOffset = $0 }),
+                    isScrollEnabled: true,
+                    userInteractionEnabled: !(isRecording || viewModel.isPlaying),
+                    topInset: TeleprompterConfig.textTopPadding,
+                    bottomInset: TeleprompterConfig.textVerticalPadding,
+                    onContentHeightChange: { newHeight in
+                        viewModel.updateMeasuredContent(height: newHeight)
+                        let vp = max(viewModel.overlaySize.height - paddingToUse, 80)
+                        viewModel.clampOffset(viewportHeight: vp)
+                    }
+                )
+                .frame(height: viewportHeight)
+                .clipped()
+                .overlay(
+                    Group {
+                        if !viewModel.isInteracting {
+                            LinearGradient(
+                                colors: [.clear, .clear, Color.black.opacity(0.22)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        }
+                    }
+                    .allowsHitTesting(false)
+                )
+                .contentShape(Rectangle())
+                .onTapGesture { viewModel.isEditorPresented = true }
             }
-            .contentShape(Rectangle())
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 6)
-                    .onChanged { value in
-                        guard !isRecording && !viewModel.isPlaying else { return }
-                        if abs(value.translation.height) < 4 { return }
-                        viewModel.beginManualScroll(isRecording: isRecording)
-                        viewModel.updateManualScroll(translation: value.translation.height, viewportHeight: viewportHeight)
-                    }
-                    .onEnded { value in
-                        guard !isRecording && !viewModel.isPlaying else { return }
-                        if abs(value.translation.height) < 4 { return }
-                        viewModel.endManualScroll(viewportHeight: viewportHeight)
-                    }
-            )
         }
         .frame(width: currentSize.width, height: currentSize.height, alignment: .topLeading)
         // Mask content to rounded corners to avoid square overlays bleeding in the corners
@@ -156,6 +174,12 @@ struct TeleprompterOverlay: View {
         .onChange(of: viewModel.isEditorPresented) { newValue in
             if !newValue {
                 viewModel.resetOffsetToTop()
+                viewModel.forcePreviewStartFromTop()
+                viewModel.markResetAfterEditing()
+                viewModel.updateContentHeight(text: text, fontSize: fontSize, width: viewModel.overlaySize.width)
+                let vp = max(viewModel.overlaySize.height - TeleprompterConfig.viewportPadding, 80)
+                viewModel.clampOffset(viewportHeight: vp)
+                viewModel.ensurePreviewAtTop(isRecording: isRecording)
             }
         }
     }
@@ -184,8 +208,8 @@ struct ScrollingTextView: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             VStack(alignment: .leading, spacing: 12) {
-                // Top buffer so the first line isn't clipped under the gradient when starting
-                Color.clear.frame(height: 0)
+                // Top buffer so the first line isn't visually clipped
+                Color.clear.frame(height: TeleprompterConfig.textTopPadding)
 
                 Text(text.isEmpty ? "" : text)
                     .font(.system(size: fontSize, weight: .semibold))
@@ -208,7 +232,7 @@ struct ScrollingTextView: View {
             Group {
                 if !isInteracting {
                     LinearGradient(
-                        colors: [Color.black.opacity(0.22), .clear, .clear, Color.black.opacity(0.22)],
+                        colors: [.clear, .clear, Color.black.opacity(0.22)],
                         startPoint: .top,
                         endPoint: .bottom
                     )
@@ -232,7 +256,7 @@ struct EditableTextPreview: View {
         ZStack(alignment: .topLeading) {
             VStack(alignment: .leading, spacing: 12) {
                 // Top buffer to match ScrollingTextView layout
-                Color.clear.frame(height: 0)
+                Color.clear.frame(height: TeleprompterConfig.textTopPadding)
 
                 Text(text.isEmpty ? "Adicione seu roteiro aqui..." : text)
                     .font(.system(size: fontSize, weight: .semibold))
@@ -255,7 +279,7 @@ struct EditableTextPreview: View {
             Group {
                 if !isInteracting {
                     LinearGradient(
-                        colors: [Color.black.opacity(0.22), .clear, .clear, Color.black.opacity(0.22)],
+                        colors: [.clear, .clear, Color.black.opacity(0.22)],
                         startPoint: .top,
                         endPoint: .bottom
                     )

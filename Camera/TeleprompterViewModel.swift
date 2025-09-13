@@ -23,6 +23,9 @@ struct TeleprompterConfig {
     static let compactViewportPadding: CGFloat = 36
     static let contentPadding: CGFloat = 32
     static let textVerticalPadding: CGFloat = 80
+    static let textTopPadding: CGFloat = 16
+    // Small top inset so first line isn't visually clipped in preview
+    static let previewTopInset: CGFloat = 8
     static let pauseAtEndDefault: Bool = true
 }
 
@@ -37,6 +40,8 @@ final class TeleprompterViewModel: ObservableObject {
     @Published var isPlaying: Bool = false
     @Published var isInteracting: Bool = false
     @Published var pauseAtEnd: Bool = TeleprompterConfig.pauseAtEndDefault
+    @Published var shouldResetToTopNextLayout: Bool = false
+    @Published var forcePreviewOffsetZero: Bool = false
     
     // Cached values for performance
     private var cachedContentHeight: CGFloat = 0
@@ -99,12 +104,27 @@ final class TeleprompterViewModel: ObservableObject {
     // MARK: - Content Height Management
     func updateContentHeight(text: String, fontSize: CGFloat, width: CGFloat) {
         let signature = "\(text.hashValue)|\(fontSize)|\(Int(width))"
-        guard signature != lastContentSignature else { return }
+        guard signature != lastContentSignature else { 
+            if shouldResetToTopNextLayout && !isPlaying {
+                contentOffset = 0
+                shouldResetToTopNextLayout = false
+            }
+            return 
+        }
         
         cachedContentHeight = calculateContentHeight(text: text, fontSize: fontSize, width: width)
         lastContentSignature = signature
         
         // Keep current contentOffset unchanged here; proper clamping will occur separately
+        if (!isPlaying && !isManualScrolling) || shouldResetToTopNextLayout {
+            contentOffset = 0
+            shouldResetToTopNextLayout = false
+        }
+    }
+
+    /// Directly update measured content height from UITextView bridge.
+    func updateMeasuredContent(height: CGFloat) {
+        cachedContentHeight = height
     }
 
     // Debounced update while interacting
@@ -196,8 +216,9 @@ final class TeleprompterViewModel: ObservableObject {
 
         let baseHeight = ceil(boundingRect.height)
         // Include internal vertical padding used in ScrollingTextView (top/bottom 12 each)
-        // plus the extra top/bottom buffer (textVerticalPadding). Add small epsilon to avoid rounding issues.
-        return ceil(baseHeight + TeleprompterConfig.textVerticalPadding + 24 + 2)
+        // plus extra bottom buffer (textVerticalPadding) and a small top buffer (textTopPadding)
+        // to avoid clipping when at offset 0. Add small epsilon to avoid rounding issues.
+        return ceil(baseHeight + TeleprompterConfig.textVerticalPadding + TeleprompterConfig.textTopPadding + 24 + 2)
     }
     
     // MARK: - Position Management
@@ -249,6 +270,10 @@ final class TeleprompterViewModel: ObservableObject {
     func finalizeResize() {
         initialResizeSize = overlaySize
         endInteraction()
+        // Ensure preview always starts from the top after a resize
+        if !isPlaying {
+            contentOffset = 0
+        }
     }
     
     // MARK: - Recording State
@@ -267,6 +292,8 @@ final class TeleprompterViewModel: ObservableObject {
             startScrolling(speed: speed, viewportHeight: viewportHeight)
         } else {
             stopScrolling(resetOffset: false)
+            // When leaving playing/recording state, ensure preview is at top
+            contentOffset = 0
         }
     }
     
@@ -277,6 +304,28 @@ final class TeleprompterViewModel: ObservableObject {
         isManualScrolling = false
         initialManualOffset = 0
         contentOffset = 0
+        // Cancel any pending measure/clamp tasks that could re-apply an old offset later
+        scheduledUpdate?.cancel(); scheduledUpdate = nil
+        scheduledClamp?.cancel(); scheduledClamp = nil
+    }
+
+    /// Ensure the preview is at the very top when not playing/recording
+    func ensurePreviewAtTop(isRecording: Bool) {
+        guard !isRecording, !isPlaying, !isManualScrolling else { return }
+        contentOffset = 0
+    }
+
+    func markResetAfterEditing() {
+        shouldResetToTopNextLayout = true
+    }
+
+    func forcePreviewStartFromTop() {
+        contentOffset = 0
+        forcePreviewOffsetZero = true
+        // Keep the forced zero a bit longer to outlive layout/measure bursts
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            self?.forcePreviewOffsetZero = false
+        }
     }
     
     deinit {
