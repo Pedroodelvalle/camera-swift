@@ -34,34 +34,65 @@ final class SegmentedRecorder: NSObject, AVCaptureFileOutputRecordingDelegate {
     var isRecording: Bool { output.isRecording }
 
     func startNewSegment() {
+        guard !output.isRecording else {
+            print("Recording already in progress")
+            return
+        }
+
         let tempURL = Self.createTempMovieURL()
         activeTempURL = tempURL
+
         let connection = output.connection(with: .video)
         if let connection, connection.isVideoOrientationSupported {
             connection.videoOrientation = orientation
         }
-        output.startRecording(to: tempURL, recordingDelegate: self)
+
+        do {
+            try output.startRecording(to: tempURL, recordingDelegate: self)
+            print("Recording started successfully")
+        } catch {
+            print("Failed to start recording: \(error)")
+            delegate?.recorder(self, didFailWith: error)
+        }
     }
 
     func stopCurrentSegment() {
-        guard output.isRecording else { return }
+        guard output.isRecording else {
+            print("No recording in progress to stop")
+            return
+        }
+
+        print("Stopping recording...")
         output.stopRecording()
     }
 
     // MARK: - AVCaptureFileOutputRecordingDelegate
     func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
-        if let error { delegate?.recorder(self, didFailWith: error); return }
+        if let error {
+            print("Recording finished with error: \(error)")
+            delegate?.recorder(self, didFailWith: error)
+            return
+        }
+
+        print("Recording finished successfully: \(outputFileURL.lastPathComponent)")
+
         if saveToPhotoLibrary {
             Self.saveVideoToPhotos(outputFileURL) { result in
                 switch result {
                 case .success:
-                    break
+                    print("Video saved to Photos successfully")
                 case .failure(let err):
+                    print("Failed to save video to Photos: \(err)")
                     self.delegate?.recorder(self, didFailWith: err)
                 }
             }
         }
+
         delegate?.recorder(self, didFinishSegment: outputFileURL)
+    }
+
+    func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
+        print("Recording started to file: \(fileURL.lastPathComponent)")
     }
 
     // MARK: - Helpers

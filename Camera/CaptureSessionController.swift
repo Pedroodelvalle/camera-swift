@@ -116,6 +116,8 @@ final class CaptureSessionController: NSObject {
 
                 // Stabilization
                 self.applyPreferredStabilizationMode()
+                // Ensure mirroring behavior matches current camera side (front mirrored)
+                self.applyMirroringForCurrentPosition()
 
                 // Default to HEVC when supported
                 self.setPreferredCodecHEVC(true)
@@ -430,6 +432,11 @@ final class CaptureSessionController: NSObject {
                     if connection.isVideoOrientationSupported {
                         connection.videoOrientation = orientation
                     }
+                    // Keep mirroring consistent whenever we touch the connection
+                    if connection.isVideoMirroringSupported {
+                        connection.automaticallyAdjustsVideoMirroring = false
+                        connection.isVideoMirrored = (self.currentPosition == .front)
+                    }
                 }
             }
         }
@@ -525,6 +532,8 @@ final class CaptureSessionController: NSObject {
         }
         // Apply stabilization if supported
         self.applyPreferredStabilizationMode()
+        // Apply mirroring for the newly selected side
+        self.applyMirroringForCurrentPosition()
         session.commitConfiguration()
     }
 
@@ -541,6 +550,8 @@ final class CaptureSessionController: NSObject {
                 self.setZoomTo(1.0, animated: false)
                 // Re-apply desired torch state on the new device side (no-op if unsupported)
                 self.applyDesiredTorchState()
+                // Keep mirroring consistent with the new side
+                self.applyMirroringForCurrentPosition()
             } catch {
                 print("Failed to toggle camera: \(error)")
             }
@@ -592,6 +603,20 @@ final class CaptureSessionController: NSObject {
         // Turn on if supported on current device
         if isTorchSupported() {
             setTorchEnabled(true)
+        }
+    }
+
+    // Ensure output mirroring matches current camera side so recorded video matches preview
+    private func applyMirroringForCurrentPosition() {
+        guard let output = self.movieFileOutput else { return }
+        let shouldMirror = (self.currentPosition == .front)
+        for connection in output.connections {
+            for port in connection.inputPorts where port.mediaType == .video {
+                if connection.isVideoMirroringSupported {
+                    connection.automaticallyAdjustsVideoMirroring = false
+                    connection.isVideoMirrored = shouldMirror
+                }
+            }
         }
     }
 }
