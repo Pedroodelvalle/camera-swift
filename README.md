@@ -11,8 +11,9 @@ A camera app that doesn't suck. Built with SwiftUI and AVFoundation because appa
 
 ## Preview
 
-- **Com Teleprompter**: <img src="foto-camera-com-teleprompter.jpeg" width="200" alt="Camera com Teleprompter">
-- **Sem Teleprompter**: <img src="foto-camera-sem-teleprompter.jpeg" width="200" alt="Camera sem Teleprompter">
+<img src="foto-camera-com-teleprompter.jpeg" width="200" alt="Camera com Teleprompter"> <img src="foto-camera-sem-teleprompter.jpeg" width="200" alt="Camera sem Teleprompter">
+
+*Com Teleprompter | Sem Teleprompter*
 
 ---
 
