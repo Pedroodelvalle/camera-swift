@@ -23,6 +23,7 @@ struct TeleprompterConfig {
     static let compactViewportPadding: CGFloat = 36
     static let contentPadding: CGFloat = 32
     static let textVerticalPadding: CGFloat = 80
+    static let pauseAtEndDefault: Bool = true
 }
 
 // MARK: - View Model
@@ -35,6 +36,7 @@ final class TeleprompterViewModel: ObservableObject {
     @Published var overlayOffset: CGSize = .zero
     @Published var isPlaying: Bool = false
     @Published var isInteracting: Bool = false
+    @Published var pauseAtEnd: Bool = TeleprompterConfig.pauseAtEndDefault
     
     // Cached values for performance
     private var cachedContentHeight: CGFloat = 0
@@ -43,6 +45,8 @@ final class TeleprompterViewModel: ObservableObject {
     private var lastTickTime: Date = Date()
     private var scheduledUpdate: DispatchWorkItem?
     private var scheduledClamp: DispatchWorkItem?
+    private var initialManualOffset: CGFloat = 0
+    private(set) var isManualScrolling: Bool = false
     
     // Initial drag/resize positions
     var initialDragOffset: CGSize = .zero
@@ -52,7 +56,7 @@ final class TeleprompterViewModel: ObservableObject {
     func startScrolling(speed: Double, viewportHeight: CGFloat) {
         guard speed > 0 else { return }
         
-        stopScrolling()
+        stopScrolling(resetOffset: false)
         lastTickTime = Date()
         
         // If there is nothing to scroll, ensure offset is zero and do not start the timer
@@ -73,16 +77,23 @@ final class TeleprompterViewModel: ObservableObject {
             if maxOffset <= 0 { self.contentOffset = 0; return }
             
             self.contentOffset += speed * deltaTime
-            if self.contentOffset > maxOffset {
-                self.contentOffset = 0
+            if self.contentOffset >= maxOffset {
+                if self.pauseAtEnd {
+                    self.contentOffset = maxOffset
+                    self.scrollTimer?.invalidate()
+                    self.scrollTimer = nil
+                    self.isPlaying = false
+                } else {
+                    self.contentOffset = 0
+                }
             }
         }
     }
     
-    func stopScrolling() {
+    func stopScrolling(resetOffset: Bool = true) {
         scrollTimer?.invalidate()
         scrollTimer = nil
-        contentOffset = 0
+        if resetOffset { contentOffset = 0 }
     }
     
     // MARK: - Content Height Management
@@ -145,6 +156,29 @@ final class TeleprompterViewModel: ObservableObject {
         if let pendingClamp = scheduledClamp { pendingClamp.perform() }
         scheduledUpdate = nil
         scheduledClamp = nil
+    }
+
+    // MARK: - Manual Scroll (user drag)
+    func beginManualScroll(isRecording: Bool) {
+        guard !isRecording else { return }
+        if isManualScrolling { return }
+        if isPlaying { stopScrolling(resetOffset: false); isPlaying = false }
+        beginInteraction()
+        initialManualOffset = contentOffset
+        isManualScrolling = true
+    }
+
+    func updateManualScroll(translation heightDelta: CGFloat, viewportHeight: CGFloat) {
+        let maxOffset = max(0, cachedContentHeight - viewportHeight)
+        // Drag up (negative) -> increase offset; Drag down (positive) -> decrease offset
+        let proposed = initialManualOffset - heightDelta
+        contentOffset = max(0, min(maxOffset, proposed))
+    }
+
+    func endManualScroll(viewportHeight: CGFloat) {
+        clampOffset(viewportHeight: viewportHeight)
+        endInteraction()
+        isManualScrolling = false
     }
     
     private func calculateContentHeight(text: String, fontSize: CGFloat, width: CGFloat) -> CGFloat {
@@ -235,7 +269,7 @@ final class TeleprompterViewModel: ObservableObject {
             isEditorPresented = false
             startScrolling(speed: speed, viewportHeight: viewportHeight)
         } else {
-            stopScrolling()
+            stopScrolling(resetOffset: false)
         }
     }
     

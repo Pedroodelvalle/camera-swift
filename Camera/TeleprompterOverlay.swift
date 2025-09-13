@@ -55,7 +55,7 @@ struct TeleprompterOverlay: View {
         
         VStack(alignment: .leading, spacing: 0) {
             // Content viewport
-            Group {
+            ZStack {
                 if isRecording || viewModel.isPlaying {
                     ScrollingTextView(
                         text: text,
@@ -69,11 +69,27 @@ struct TeleprompterOverlay: View {
                         text: text,
                         fontSize: fontSize,
                         height: viewportHeight,
-                        onTap: { viewModel.isEditorPresented = true },
-                        isInteracting: viewModel.isInteracting
+                        onTap: { if !viewModel.isManualScrolling { viewModel.isEditorPresented = true } },
+                        isInteracting: viewModel.isInteracting,
+                        offset: viewModel.contentOffset
                     )
                 }
             }
+            .contentShape(Rectangle())
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 6)
+                    .onChanged { value in
+                        guard !isRecording && !viewModel.isPlaying else { return }
+                        if abs(value.translation.height) < 4 { return }
+                        viewModel.beginManualScroll(isRecording: isRecording)
+                        viewModel.updateManualScroll(translation: value.translation.height, viewportHeight: viewportHeight)
+                    }
+                    .onEnded { value in
+                        guard !isRecording && !viewModel.isPlaying else { return }
+                        if abs(value.translation.height) < 4 { return }
+                        viewModel.endManualScroll(viewportHeight: viewportHeight)
+                    }
+            )
         }
         .frame(width: currentSize.width, height: currentSize.height, alignment: .topLeading)
         // Mask content to rounded corners to avoid square overlays bleeding in the corners
@@ -130,6 +146,11 @@ struct TeleprompterOverlay: View {
                 .preferredColorScheme(.dark)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+        }
+        .onChange(of: viewModel.isEditorPresented) { newValue in
+            if !newValue {
+                viewModel.contentOffset = 0
+            }
         }
     }
     
@@ -199,6 +220,7 @@ struct EditableTextPreview: View {
     let height: CGFloat
     let onTap: () -> Void
     let isInteracting: Bool
+    let offset: CGFloat
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -219,6 +241,7 @@ struct EditableTextPreview: View {
                 // Bottom buffer to match ScrollingTextView layout
                 Color.clear.frame(height: TeleprompterConfig.textVerticalPadding / 2)
             }
+            .offset(y: -offset)
         }
         .frame(height: height)
         .clipped()
