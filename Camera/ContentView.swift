@@ -163,7 +163,7 @@ struct ContentView: View {
                             Circle()
                                 .fill(Color.white.opacity(0.1)) // Fundo semi-transparente
                                 .frame(width: 80, height: 80)
-                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                .overlay(Circle().stroke(Color.white, lineWidth: 4))
 
                             // Círculo vermelho que diminui e fica mais quadrado arredondado quando grava
                             RoundedRectangle(cornerRadius: model.isRecording ? 12 : 38)
