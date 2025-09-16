@@ -292,8 +292,6 @@ final class TeleprompterViewModel: ObservableObject {
             startScrolling(speed: speed, viewportHeight: viewportHeight)
         } else {
             stopScrolling(resetOffset: false)
-            // When leaving playing/recording state, ensure preview is at top
-            contentOffset = 0
         }
     }
     

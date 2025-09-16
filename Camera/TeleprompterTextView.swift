@@ -13,10 +13,23 @@ struct TeleprompterTextView: UIViewRepresentable {
         var isProgrammaticScroll = false
         var contentOffset: Binding<CGFloat>
         var onHeightChange: (CGFloat) -> Void
+        var lastTextSignature: Int = 0
+        var lastFontSize: CGFloat = 0
+        var lastLineSpacing: CGFloat = 0
+        var lastInsets: UIEdgeInsets = .zero
+        var lastContentWidth: CGFloat = 0
 
         init(contentOffset: Binding<CGFloat>, onHeightChange: @escaping (CGFloat) -> Void) {
             self.contentOffset = contentOffset
             self.onHeightChange = onHeightChange
+        }
+
+        func recordState(text: String, fontSize: CGFloat, lineSpacing: CGFloat, insets: UIEdgeInsets, contentWidth: CGFloat) {
+            lastTextSignature = text.hashValue
+            lastFontSize = fontSize
+            lastLineSpacing = lineSpacing
+            lastInsets = insets
+            lastContentWidth = contentWidth
         }
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
@@ -64,6 +77,15 @@ struct TeleprompterTextView: UIViewRepresentable {
         tv.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         applyText(to: tv)
 
+        let inset = UIEdgeInsets(top: topInset, left: horizontalPadding, bottom: bottomInset, right: horizontalPadding)
+        context.coordinator.recordState(
+            text: text,
+            fontSize: fontSize,
+            lineSpacing: lineSpacing,
+            insets: inset,
+            contentWidth: max(0, tv.bounds.width - inset.left - inset.right)
+        )
+
         // Initial height propagation
         DispatchQueue.main.async {
             self.updateContentSize(from: tv)
@@ -80,19 +102,34 @@ struct TeleprompterTextView: UIViewRepresentable {
 
         // Update insets if needed
         let desiredInset = UIEdgeInsets(top: topInset, left: horizontalPadding, bottom: bottomInset, right: horizontalPadding)
-        if tv.textContainerInset != desiredInset { tv.textContainerInset = desiredInset }
-
-        // Update text attributes when text or font changes
-        if tv.attributedText.string != text || tv.font?.pointSize != fontSize {
-            applyText(to: tv)
-            // After reflow, recompute size and reset offset if needed will be handled externally
-            updateContentSize(from: tv)
-        } else {
-            // Still ensure the height stays fresh
-            updateContentSize(from: tv)
+        let insetsChanged = tv.textContainerInset != desiredInset
+        if insetsChanged {
+            tv.textContainerInset = desiredInset
         }
 
-        // Apply programmatic contentOffset from binding
+        let currentContentWidth = max(0, tv.bounds.width - desiredInset.left - desiredInset.right)
+        let textSignature = text.hashValue
+        let textChanged = context.coordinator.lastTextSignature != textSignature
+        let fontChanged = abs(context.coordinator.lastFontSize - fontSize) > .ulpOfOne
+        let spacingChanged = abs(context.coordinator.lastLineSpacing - lineSpacing) > .ulpOfOne
+        let widthChanged = abs(context.coordinator.lastContentWidth - currentContentWidth) > 0.5
+
+        if textChanged || fontChanged || spacingChanged {
+            applyText(to: tv)
+        }
+
+        if textChanged || fontChanged || spacingChanged || insetsChanged || widthChanged {
+            updateContentSize(from: tv)
+            context.coordinator.recordState(
+                text: text,
+                fontSize: fontSize,
+                lineSpacing: lineSpacing,
+                insets: desiredInset,
+                contentWidth: currentContentWidth
+            )
+        }
+
+        // Apply programmatic contentOffset from binding when needed
         let currentY = tv.contentOffset.y
         if abs(currentY - contentOffset) > 0.5 {
             context.coordinator.isProgrammaticScroll = true

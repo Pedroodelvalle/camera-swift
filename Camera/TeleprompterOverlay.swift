@@ -15,6 +15,7 @@ struct TeleprompterOverlay: View {
     @Binding var isRecording: Bool
     
     @StateObject private var viewModel = TeleprompterViewModel()
+    @State private var showsControls = false
     
     var body: some View {
         GeometryReader { geometry in
@@ -25,10 +26,14 @@ struct TeleprompterOverlay: View {
                     if !isRecording && !viewModel.isPlaying && !viewModel.isManualScrolling {
                         viewModel.contentOffset = 0
                     }
+                    showsControls = false
                 }
                 .onChange(of: isRecording) { newValue in
                     let vpPadding = newValue ? TeleprompterConfig.compactViewportPadding : TeleprompterConfig.viewportPadding
                     let viewportHeight = max(viewModel.overlaySize.height - vpPadding, 80)
+                    if newValue {
+                        withAnimation(.easeOut(duration: 0.2)) { showsControls = false }
+                    }
                     viewModel.handleRecordingStateChange(isRecording: newValue, speed: speed, viewportHeight: viewportHeight)
                 }
                 .onChange(of: text) { _ in
@@ -63,10 +68,21 @@ struct TeleprompterOverlay: View {
                     viewModel.scheduleContentHeightUpdate(text: text, fontSize: fontSize, width: viewModel.overlaySize.width)
                     let vp = max(viewModel.overlaySize.height - TeleprompterConfig.viewportPadding, 80)
                     viewModel.scheduleClampOffset(viewportHeight: vp)
+                    guard !viewModel.isInteracting else { return }
                     // Always keep preview starting at top when not playing/recording
                     viewModel.ensurePreviewAtTop(isRecording: isRecording)
                     if !isRecording && !viewModel.isPlaying {
                         viewModel.forcePreviewStartFromTop()
+                    }
+                }
+                .onChange(of: viewModel.isPlaying) { playing in
+                    if playing {
+                        withAnimation(.easeOut(duration: 0.2)) { showsControls = false }
+                    }
+                }
+                .onChange(of: viewModel.isInteracting) { interacting in
+                    if interacting {
+                        withAnimation(.easeOut(duration: 0.2)) { showsControls = false }
                     }
                 }
         }
@@ -138,10 +154,10 @@ struct TeleprompterOverlay: View {
             BottomSlidersBar(
                 fontSize: $fontSize,
                 speed: $speed,
-                showSliders: !isScrolling,
+                isExpanded: $showsControls,
+                isDisabled: isScrolling,
                 maxContentWidth: currentSize.width
             )
-            .frame(height: 48)
             .padding(.bottom, 6)
             , alignment: .bottom
         )
@@ -340,25 +356,59 @@ struct CompactSliders: View {
 struct BottomSlidersBar: View {
     @Binding var fontSize: CGFloat
     @Binding var speed: Double
-    let showSliders: Bool
+    @Binding var isExpanded: Bool
+    let isDisabled: Bool
     let maxContentWidth: CGFloat
     
     var body: some View {
-        GeometryReader { geo in
-            let total = min(geo.size.width, maxContentWidth)
-            HStack {
-                Spacer(minLength: 0)
-                if showSliders, total > 220 {
+        HStack {
+            Spacer(minLength: 0)
+            VStack(spacing: 8) {
+                if isExpanded && !isDisabled {
                     CompactSliders(
                         fontSize: $fontSize,
                         speed: $speed,
-                        maxWidth: total - 40
+                        maxWidth: maxContentWidth
                     )
-                    .transition(.opacity)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                Spacer(minLength: 0)
+                ControlVisibilityButton(
+                    isExpanded: isExpanded,
+                    isDisabled: isDisabled,
+                    toggle: {
+                        withAnimation(.easeInOut(duration: 0.22)) { isExpanded.toggle() }
+                    }
+                )
             }
+            .padding(.horizontal, 8)
+            Spacer(minLength: 0)
         }
+        .onChange(of: isDisabled) { disabled in
+            guard disabled, isExpanded else { return }
+            withAnimation(.easeOut(duration: 0.18)) { isExpanded = false }
+        }
+    }
+}
+
+struct ControlVisibilityButton: View {
+    var isExpanded: Bool
+    var isDisabled: Bool
+    var toggle: () -> Void
+    
+    var body: some View {
+        Button {
+            guard !isDisabled else { return }
+            toggle()
+        } label: {
+            Image(systemName: isExpanded ? "xmark" : "slider.horizontal.3")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.white)
+                .padding(10)
+        }
+        .buttonStyle(GlassCircleButtonStyle())
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.55 : 1)
+        .accessibilityLabel(isExpanded ? "Ocultar ajustes do teleprompter" : "Mostrar ajustes do teleprompter")
     }
 }
 
