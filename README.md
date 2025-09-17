@@ -20,6 +20,7 @@ A camera app that doesn't suck. Built with SwiftUI and AVFoundation featuring te
 
 ## Features
 
+- **Take Viewer** (visualize seus takes gravados com preview expandido)
 - **Segmented Recording** with thumbnails (because nobody wants to lose their work)
 - **Live Teleprompter** with drag & resize (because reading from paper is for cavemen)
 - **Real-time Filters** (Rose, Mono, Noir, Chrome - not Instagram filters)
