@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AVFoundation
+import AVKit
 
 struct ContentView: View {
     @Environment(\.dismiss) private var dismiss
@@ -15,6 +16,7 @@ struct ContentView: View {
     @State private var countdownTimer: Timer?
     @State private var showDeleteConfirm: Bool = false
     @State private var segmentToDelete: CameraViewModel.RecordedSegment? = nil
+    @State private var previewSegment: CameraViewModel.RecordedSegment?
     @State private var showFilterPicker: Bool = false
 
     var body: some View {
@@ -214,30 +216,35 @@ struct ContentView: View {
                         HStack(spacing: 6) {
                             ForEach(model.segments) { seg in
                                 ZStack(alignment: .topTrailing) {
-                                    Image(uiImage: seg.thumbnail)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 34, height: 44)
-                                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                                .stroke(Color.white.opacity(0.6), lineWidth: 0.8)
-                                        )
+                                    Button {
+                                        previewSegment = seg
+                                    } label: {
+                                        Image(uiImage: seg.thumbnail)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 44, height: 58)
+                                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                    .stroke(Color.white.opacity(0.6), lineWidth: 0.8)
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
 
                                     Button(action: {
                                         segmentToDelete = seg
                                         showDeleteConfirm = true
                                     }) {
                                         Image(systemName: "xmark")
-                                            .font(.system(size: 8, weight: .bold))
+                                            .font(.system(size: 7, weight: .bold))
                                             .foregroundColor(.white)
-                                            .frame(width: 14, height: 14)
+                                            .frame(width: 12, height: 12)
                                             .background(Color.black.opacity(0.75))
                                             .clipShape(Circle())
                                     }
                                     .padding(2)
                                 }
-                                .frame(width: 34, height: 44)
+                                .frame(width: 44, height: 58)
                             }
                         }
                         .padding(.horizontal, 10)
@@ -336,6 +343,18 @@ struct ContentView: View {
         .onChange(of: model.isTeleprompterOn) { _ in
             withAnimation(.easeOut(duration: 0.2)) { showFilterPicker = false }
         }
+        .sheet(item: $previewSegment) { segment in
+            SegmentPlaybackView(
+                segment: segment,
+                onDelete: {
+                    model.deleteSegment(segment)
+                    previewSegment = nil
+                },
+                onClose: {
+                    previewSegment = nil
+                }
+            )
+        }
         .alert("Deseja apagar esse take?", isPresented: $showDeleteConfirm) {
             Button("Apagar", role: .destructive) {
                 if let seg = segmentToDelete {
@@ -418,6 +437,72 @@ extension ContentView {
         switch filter {
         case .none: return nil
         case .mono: return Color.black
+        }
+    }
+}
+
+struct SegmentPlaybackView: View {
+    let segment: CameraViewModel.RecordedSegment
+    let onDelete: () -> Void
+    let onClose: () -> Void
+
+    @State private var player = AVPlayer()
+    @State private var showDeleteDialog = false
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black
+                    .ignoresSafeArea()
+
+                VStack(spacing: 24) {
+                    VideoPlayer(player: player)
+                        .aspectRatio(9.0 / 16.0, contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .shadow(color: Color.black.opacity(0.4), radius: 18, x: 0, y: 12)
+
+                    Button(role: .destructive) {
+                        showDeleteDialog = true
+                    } label: {
+                        Label("Apagar take", systemImage: "trash")
+                            .font(.system(size: 17, weight: .semibold))
+                            .padding(.vertical, 12)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+
+                    Spacer()
+                }
+                .padding()
+            }
+            .navigationTitle("Pré-visualização")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Fechar", action: onClose)
+                }
+            }
+            .confirmationDialog(
+                "Apagar este take?",
+                isPresented: $showDeleteDialog,
+                titleVisibility: .visible
+            ) {
+                Button("Apagar", role: .destructive) {
+                    player.pause()
+                    onDelete()
+                }
+                Button("Cancelar", role: .cancel) { }
+            }
+        }
+        .interactiveDismissDisabled(true)
+        .onAppear {
+            player.replaceCurrentItem(with: AVPlayerItem(url: segment.url))
+            player.play()
+        }
+        .onDisappear {
+            player.pause()
+            player.replaceCurrentItem(with: nil)
         }
     }
 }
